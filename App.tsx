@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Play, Pause, Settings, ShieldAlert, Activity, 
-  Wifi, Users, Key, Download, Trash2, Cpu, Type, Hash, AlignLeft
+  Wifi, Users, Key, Download, Trash2, Cpu, Type, Hash, AlignLeft,
+  Network
 } from 'lucide-react';
 import ConsoleLog from './components/ConsoleLog';
 import StatCard from './components/StatCard';
@@ -20,7 +21,8 @@ const DEFAULT_CONFIG: Config = {
   useLowercase: false,
   useUppercase: false,
   codeLength: 6,
-  codePrefix: ''
+  codePrefix: '',
+  loginUrl: 'https://portal-as.ruijienetworks.com/auth/wifidogAuth/login/?gw_id=105f025095cc&gw_sn=H1T81SZ001332&gw_address=172.16.200.1&gw_port=2060&ip=172.16.219.79&mac=1a:c3:0e:17:e2:bf&slot_num=0&nasip=192.168.1.97&ssid=VLAN20&ustate=0&mac_req=0&url=https%3A%2F%2Fwww%2Ex%2Ecom%2F&chap_id=%5C340&chap_challenge=%5C003%5C272%5C071%5C251%5C154%5C266%5C314%5C357%5C226%5C202%5C003%5C266%5C226%5C145%5C177%5C225'
 };
 
 const MAX_LOGS = 200;
@@ -38,6 +40,8 @@ export default function App() {
   });
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [validCodes, setValidCodes] = useState<ValidCode[]>([]);
+  const [activeSessions, setActiveSessions] = useState<SessionSlot[]>([]); // For UI display
+  const [rightTab, setRightTab] = useState<'valid' | 'pool'>('valid');
   
   // Refs for async loop management
   const sessionsRef = useRef<SessionSlot[]>([]);
@@ -100,6 +104,7 @@ export default function App() {
     
     // Update active count for UI
     setStats(prev => ({...prev, sessionsActive: sessionsRef.current.length}));
+    setActiveSessions([...sessionsRef.current]); // Sync for UI display
     
     if (isRunningRef.current) {
         setTimeout(manageSessions, 1000);
@@ -152,11 +157,13 @@ export default function App() {
        addLog(`Session ${sessionSlot.sessionId.substring(0,8)} expired/banned.`, 'error');
        // Remove session
        sessionsRef.current = sessionsRef.current.filter(s => s.id !== sessionSlot.id);
+       setActiveSessions([...sessionsRef.current]);
     } else {
        // Decrement usage
        sessionSlot.remainingUses--;
        if (sessionSlot.remainingUses <= 0) {
            sessionsRef.current = sessionsRef.current.filter(s => s.id !== sessionSlot.id);
+           setActiveSessions([...sessionsRef.current]);
        }
     }
 
@@ -279,8 +286,20 @@ export default function App() {
                     <div className="space-y-6">
                         {/* Section 1: Connection & Workers */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className='md:col-span-2'>
+                                <label className="block text-xs text-zinc-500 mb-1">Login URL (For Session Fetching)</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-sm text-zinc-300 focus:border-emerald-500 focus:outline-none font-mono"
+                                    value={config.loginUrl}
+                                    onChange={e => setConfig({...config, loginUrl: e.target.value})}
+                                    disabled={isRunning}
+                                    placeholder="https://..."
+                                />
+                                <p className="text-[10px] text-zinc-600 mt-1">Full URL from browser address bar when on the login page</p>
+                            </div>
                             <div>
-                                <label className="block text-xs text-zinc-500 mb-1">Target URL</label>
+                                <label className="block text-xs text-zinc-500 mb-1">Target Base URL</label>
                                 <input 
                                     type="text" 
                                     className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-sm text-zinc-300 focus:border-emerald-500 focus:outline-none font-mono"
@@ -426,49 +445,97 @@ export default function App() {
 
         </div>
 
-        {/* Right Column: Results */}
+        {/* Right Column: Results & Active Pool */}
         <div className="space-y-6">
             <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden flex flex-col h-[calc(100vh-8rem)] sticky top-24">
-                <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900">
-                    <div className="flex items-center gap-2">
-                        <Wifi className="w-4 h-4 text-emerald-500" />
-                        <h3 className="text-sm font-bold text-white uppercase">Valid Codes</h3>
-                        <span className="bg-emerald-500/10 text-emerald-500 text-xs px-2 py-0.5 rounded-full font-mono">
-                            {validCodes.length}
-                        </span>
-                    </div>
-                    {validCodes.length > 0 && (
-                        <div className="flex gap-1">
-                             <button onClick={() => setValidCodes([])} className="p-1.5 hover:bg-zinc-800 rounded text-zinc-500 hover:text-red-400">
-                                <Trash2 className="w-4 h-4" />
-                            </button>
-                            <button onClick={downloadResults} className="p-1.5 hover:bg-zinc-800 rounded text-zinc-500 hover:text-white">
-                                <Download className="w-4 h-4" />
-                            </button>
-                        </div>
-                    )}
-                </div>
                 
-                <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                    {validCodes.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center text-zinc-600 gap-2">
-                            <Key className="w-8 h-8 opacity-20" />
-                            <span className="text-xs">No valid codes found yet.</span>
-                        </div>
-                    ) : (
-                        validCodes.map((code, idx) => (
-                            <div key={idx} className="bg-zinc-950 border border-emerald-500/30 p-3 rounded group hover:border-emerald-500 transition-colors">
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="text-lg font-mono font-bold text-white tracking-widest">{code.code}</span>
-                                    <span className="text-[10px] text-zinc-500">{code.timestamp}</span>
-                                </div>
-                                <div className="text-xs font-mono text-zinc-500 truncate">
-                                    SID: <span className="text-zinc-400">{code.sessionId}</span>
-                                </div>
-                            </div>
-                        ))
-                    )}
+                {/* Tabs */}
+                <div className="flex border-b border-zinc-800 bg-zinc-900">
+                    <button 
+                        onClick={() => setRightTab('valid')}
+                        className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 ${rightTab === 'valid' ? 'bg-zinc-800/50 text-white border-b-2 border-emerald-500' : 'text-zinc-500 hover:bg-zinc-800/30'}`}
+                    >
+                        <Wifi className="w-4 h-4" /> Valid Codes
+                        {validCodes.length > 0 && <span className="bg-emerald-500/20 text-emerald-500 px-1.5 rounded-full">{validCodes.length}</span>}
+                    </button>
+                    <button 
+                        onClick={() => setRightTab('pool')}
+                        className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 ${rightTab === 'pool' ? 'bg-zinc-800/50 text-white border-b-2 border-blue-500' : 'text-zinc-500 hover:bg-zinc-800/30'}`}
+                    >
+                        <Network className="w-4 h-4" /> Active Pool
+                        {activeSessions.length > 0 && <span className="bg-blue-500/20 text-blue-500 px-1.5 rounded-full">{activeSessions.length}</span>}
+                    </button>
                 </div>
+
+                {/* Content */}
+                {rightTab === 'valid' && (
+                    <>
+                        <div className="p-3 border-b border-zinc-800 flex justify-end gap-1 bg-zinc-900/50">
+                            {validCodes.length > 0 && (
+                                <>
+                                    <button onClick={() => setValidCodes([])} className="p-1.5 hover:bg-zinc-800 rounded text-zinc-500 hover:text-red-400">
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                    <button onClick={downloadResults} className="p-1.5 hover:bg-zinc-800 rounded text-zinc-500 hover:text-white">
+                                        <Download className="w-4 h-4" />
+                                    </button>
+                                </>
+                            )}
+                            {validCodes.length === 0 && <span className="text-[10px] text-zinc-600 italic">Waiting for results...</span>}
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                            {validCodes.length === 0 ? (
+                                <div className="h-full flex flex-col items-center justify-center text-zinc-600 gap-2">
+                                    <Key className="w-8 h-8 opacity-20" />
+                                    <span className="text-xs">No valid codes found yet.</span>
+                                </div>
+                            ) : (
+                                validCodes.map((code, idx) => (
+                                    <div key={idx} className="bg-zinc-950 border border-emerald-500/30 p-3 rounded group hover:border-emerald-500 transition-colors">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="text-lg font-mono font-bold text-white tracking-widest">{code.code}</span>
+                                            <span className="text-[10px] text-zinc-500">{code.timestamp}</span>
+                                        </div>
+                                        <div className="text-xs font-mono text-zinc-500 truncate">
+                                            SID: <span className="text-zinc-400">{code.sessionId}</span>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </>
+                )}
+
+                {rightTab === 'pool' && (
+                    <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                        {activeSessions.length === 0 ? (
+                            <div className="h-full flex flex-col items-center justify-center text-zinc-600 gap-2">
+                                <Network className="w-8 h-8 opacity-20" />
+                                <span className="text-xs">Pool is empty or idle.</span>
+                            </div>
+                        ) : (
+                            activeSessions.map((session, idx) => (
+                                <div key={session.id} className="bg-zinc-950 border border-zinc-800 p-3 rounded hover:border-blue-500/30 transition-colors">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <span className="text-xs font-mono text-blue-400 break-all">{session.sessionId}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                                            <div 
+                                                className="h-full bg-blue-500 rounded-full transition-all duration-500" 
+                                                style={{ width: `${(session.remainingUses / 40) * 100}%` }}
+                                            />
+                                        </div>
+                                        <span className="text-[10px] font-mono text-zinc-500 min-w-[30px] text-right">
+                                            {session.remainingUses} left
+                                        </span>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                )}
+                
             </div>
         </div>
 

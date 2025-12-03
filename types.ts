@@ -1,4 +1,5 @@
 
+
 export interface ScanStats {
   attempts: number;
   validFound: number;
@@ -18,6 +19,7 @@ export interface Config {
   useUppercase: boolean;
   codeLength: number;
   codePrefix: string;
+  loginUrl: string;
 }
 
 export interface LogEntry {
