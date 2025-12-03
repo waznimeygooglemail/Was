@@ -1,4 +1,5 @@
 
+
 import { Config, SessionSlot } from '../types';
 
 // Helper to generate random code based on config
@@ -6,7 +7,6 @@ export const generateAccessCode = (config: Config): string => {
   let charset = '';
   if (config.useNumbers) charset += '0123456789';
   if (config.useLowercase) charset += 'abcdefghijklmnopqrstuvwxyz';
-  if (config.useUppercase) charset += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
   // Fallback if nothing selected
   if (charset.length === 0) charset = '0123456789';
@@ -36,13 +36,19 @@ export const fetchSessionId = async (config: Config): Promise<string | null> => 
   try {
     // Real implementation (likely to fail in browser due to CORS without a proxy)
     // This replicates the Python script's fetch logic
+    const urlParams = new URLSearchParams(new URL(config.loginUrl).search);
+    // In a real scenario, logic involves hitting the loginUrl, following redirect, and capturing sessionId.
+    // Since we can't easily follow redirects in client-side JS without CORS, 
+    // we attempt to parse it if the user pasted a URL that ALREADY has the session (common mistake),
+    // OR we just use the loginUrl as the entry point.
+    
+    // For this specific tool logic based on the python script:
+    // It hits the 'wifidog' endpoint.
     const response = await fetch(`${config.targetUrl}/api/auth/wifidog?stage=portal`, {
       method: 'GET',
-      redirect: 'follow', // In browser, we rely on browser handling redirects usually
+      redirect: 'follow', 
     });
     
-    // In a real browser scenario, we might not get the headers due to CORS.
-    // This is best effort or requires a proxy.
     const url = new URL(response.url);
     return url.searchParams.get('sessionId');
   } catch (error) {

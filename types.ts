@@ -16,7 +16,6 @@ export interface Config {
   // Code Generation Config
   useNumbers: boolean;
   useLowercase: boolean;
-  useUppercase: boolean;
   codeLength: number;
   codePrefix: string;
   loginUrl: string;
