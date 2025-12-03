@@ -1,0 +1,5 @@
+{
+  "name": "NetVoucher Brute",
+  "description": "A web-based dashboard to scan and validate network voucher codes, featuring session pooling, concurrent workers, and Telegram integration.",
+  "requestFramePermissions": []
+}
