@@ -4,31 +4,20 @@ interface StatCardProps {
   label: string;
   value: string | number;
   icon: React.ReactNode;
-  trend?: string;
-  color?: string;
+  active?: boolean;
 }
 
-const StatCard: React.FC<StatCardProps> = ({ label, value, icon, trend, color = "zinc" }) => {
-  const getBorderColor = () => {
-    switch(color) {
-        case 'emerald': return 'border-emerald-500/30';
-        case 'red': return 'border-red-500/30';
-        case 'blue': return 'border-blue-500/30';
-        default: return 'border-zinc-700';
-    }
-  };
-
+const StatCard: React.FC<StatCardProps> = ({ label, value, icon, active }) => {
   return (
-    <div className={`bg-zinc-900/50 border ${getBorderColor()} rounded-lg p-4 backdrop-blur-sm`}>
+    <div className={`p-4 rounded-lg border transition-all duration-300 ${active ? 'bg-blue-500/10 border-blue-500/30' : 'bg-slate-900 border-slate-800'}`}>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-zinc-400 text-xs uppercase font-semibold tracking-wider">{label}</span>
-        <div className={`p-1.5 rounded-md bg-zinc-800 text-zinc-300`}>
+        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">{label}</span>
+        <div className={`${active ? 'text-blue-400' : 'text-slate-600'}`}>
             {icon}
         </div>
       </div>
-      <div className="flex items-end gap-2">
-        <span className="text-2xl font-bold font-mono text-white">{value}</span>
-        {trend && <span className="text-xs text-zinc-500 mb-1 font-mono">{trend}</span>}
+      <div className="text-2xl font-mono font-bold text-slate-100">
+        {value}
       </div>
     </div>
   );

@@ -1,5 +1,3 @@
-
-
 export interface ScanStats {
   attempts: number;
   validFound: number;
@@ -12,8 +10,7 @@ export interface Config {
   telegramBotToken: string;
   telegramChatId: string;
   threadCount: number;
-  simulationMode: boolean; // To allow UI testing without CORS issues
-  // Code Generation Config
+  simulationMode: boolean; 
   useNumbers: boolean;
   useLowercase: boolean;
   codeLength: number;

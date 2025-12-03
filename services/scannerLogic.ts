@@ -1,6 +1,4 @@
-
-
-import { Config, SessionSlot } from '../types';
+import { Config } from '../types';
 
 // Helper to generate random code based on config
 export const generateAccessCode = (config: Config): string => {
@@ -12,7 +10,6 @@ export const generateAccessCode = (config: Config): string => {
   if (charset.length === 0) charset = '0123456789';
 
   let result = config.codePrefix || '';
-  // Ensure we don't exceed length if prefix is long, but try to fill remaining
   const remainingLength = Math.max(0, config.codeLength - result.length);
 
   for (let i = 0; i < remainingLength; i++) {
@@ -26,31 +23,55 @@ export const generateAccessCode = (config: Config): string => {
 // Simulate network delay
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Mock Session ID Fetcher
+// Session Fetcher with Proxy Support
 export const fetchSessionId = async (config: Config): Promise<string | null> => {
-  if (config.simulationMode) {
-    await delay(500);
-    return 'sess_' + Math.random().toString(36).substring(7);
+  // 1. Check if user pasted a URL that ALREADY contains the session ID
+  if (config.loginUrl) {
+    try {
+        const urlObj = new URL(config.loginUrl);
+        const existingSid = urlObj.searchParams.get('sessionId');
+        if (existingSid) {
+            console.log("Extracted Session ID directly from Config URL:", existingSid);
+            // Add a tiny delay to simulate "fetching" so the UI doesn't glitch
+            await delay(100);
+            return existingSid;
+        }
+    } catch (e) {
+        // invalid url, ignore
+    }
   }
 
+  // 2. Simulation Mode
+  if (config.simulationMode) {
+    await delay(800);
+    return 'sess_' + Math.random().toString(36).substring(2, 10);
+  }
+
+  // 3. Real Fetch via Proxy
   try {
-    // Real implementation (likely to fail in browser due to CORS without a proxy)
-    // This replicates the Python script's fetch logic
-    const urlParams = new URLSearchParams(new URL(config.loginUrl).search);
-    // In a real scenario, logic involves hitting the loginUrl, following redirect, and capturing sessionId.
-    // Since we can't easily follow redirects in client-side JS without CORS, 
-    // we attempt to parse it if the user pasted a URL that ALREADY has the session (common mistake),
-    // OR we just use the loginUrl as the entry point.
+    const PROXY_BASE = 'https://corsproxy.io/?';
+    // We target the wifidog auth endpoint which usually redirects to the portal with sessionId
+    const targetUrl = config.loginUrl; 
     
-    // For this specific tool logic based on the python script:
-    // It hits the 'wifidog' endpoint.
-    const response = await fetch(`${config.targetUrl}/api/auth/wifidog?stage=portal`, {
+    const response = await fetch(PROXY_BASE + encodeURIComponent(targetUrl), {
       method: 'GET',
-      redirect: 'follow', 
     });
     
-    const url = new URL(response.url);
-    return url.searchParams.get('sessionId');
+    // The proxy returns the content of the final page. 
+    // Sometimes the sessionId is in the final URL (response.url), 
+    // or inside the HTML (if it's a meta refresh or JS redirect).
+    // Or, simpler: we check the response URL itself if the proxy forwarded the redirect chain.
+    
+    // Attempt 1: Check URL params of the text response (if proxy simply returned the redirect body)
+    const text = await response.text();
+    
+    // Regex to find sessionId=xxxxx inside the response text or links
+    const match = text.match(/sessionId=([a-zA-Z0-9]+)/);
+    if (match && match[1]) {
+        return match[1];
+    }
+
+    return null;
   } catch (error) {
     console.error("Session fetch error:", error);
     return null;
@@ -65,23 +86,23 @@ export const checkCode = async (
 ): Promise<{ valid: boolean; status: number; message: string }> => {
   
   if (config.simulationMode) {
-    // 0.5% chance of finding a code in simulation
-    const isSuccess = Math.random() < 0.005; 
-    await delay(100 + Math.random() * 200); // Jitter
+    const isSuccess = Math.random() < 0.001; // Low chance
+    await delay(150 + Math.random() * 300); // Realistic Jitter
     
     if (isSuccess) {
         return { valid: true, status: 200, message: 'true' };
     }
-    // 1% chance of session timeout
-    if (Math.random() < 0.01) {
+    if (Math.random() < 0.02) {
         return { valid: false, status: 401, message: 'session timed out' };
     }
     return { valid: false, status: 200, message: 'false' };
   }
 
-  // Real Request logic
   try {
-    const response = await fetch(`${config.targetUrl}/api/auth/voucher/?lang=en_US`, {
+    const PROXY_BASE = 'https://corsproxy.io/?';
+    const target = `${config.targetUrl}/api/auth/voucher/?lang=en_US`;
+    
+    const response = await fetch(PROXY_BASE + encodeURIComponent(target), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
