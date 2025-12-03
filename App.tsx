@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Play, Pause, Settings, ShieldAlert, Activity, 
-  Wifi, Users, Key, Download, Trash2, Cpu
+  Wifi, Users, Key, Download, Trash2, Cpu, Type, Hash, AlignLeft
 } from 'lucide-react';
 import ConsoleLog from './components/ConsoleLog';
 import StatCard from './components/StatCard';
@@ -12,8 +13,14 @@ const DEFAULT_CONFIG: Config = {
   targetUrl: 'https://portal-as.ruijienetworks.com',
   telegramBotToken: '',
   telegramChatId: '',
-  threadCount: 20, // Web browsers handle threads differently, this is concurrent promises
-  simulationMode: true
+  threadCount: 20,
+  simulationMode: true,
+  // New Defaults
+  useNumbers: true,
+  useLowercase: false,
+  useUppercase: false,
+  codeLength: 6,
+  codePrefix: ''
 };
 
 const MAX_LOGS = 200;
@@ -42,6 +49,7 @@ export default function App() {
     const saved = localStorage.getItem('netvoucher_config');
     if (saved) {
         try {
+            // Merge saved with default to handle new fields
             setConfig({ ...DEFAULT_CONFIG, ...JSON.parse(saved) });
         } catch(e) {}
     }
@@ -117,9 +125,9 @@ export default function App() {
        return;
     }
 
-    // Try a code
-    const code = generateAccessCode();
-    // addLog(`Worker ${workerId} trying ${code} on ${sessionSlot.sessionId.substring(0,6)}...`, 'info'); // Too verbose for UI
+    // Try a code - NOW USES CONFIG
+    const code = generateAccessCode(config);
+    // addLog(`Worker ${workerId} trying ${code} on ${sessionSlot.sessionId.substring(0,6)}...`, 'info'); 
 
     const result = await checkCode(code, sessionSlot.sessionId, config);
 
@@ -170,7 +178,8 @@ export default function App() {
         setIsRunning(true);
         isRunningRef.current = true;
         setStats(prev => ({...prev, startTime: Date.now()}));
-        addLog(`Initializing scan with ${config.threadCount} concurrent workers...`, 'success');
+        addLog(`Initializing scan with ${config.threadCount} workers...`, 'success');
+        addLog(`Config: Len=${config.codeLength}, Prefix="${config.codePrefix}", Num=${config.useNumbers}, Lower=${config.useLowercase}`, 'info');
         
         // Start Session Manager
         manageSessions();
@@ -217,9 +226,10 @@ export default function App() {
                  </div>
                  <button 
                     onClick={() => setShowConfig(!showConfig)}
-                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white"
+                    className={`p-2 rounded-lg transition-colors flex items-center gap-2 ${showConfig ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-900'}`}
                  >
                     <Settings className="w-5 h-5" />
+                    <span className="text-xs font-bold hidden sm:inline">CONFIG</span>
                  </button>
             </div>
         </div>
@@ -251,7 +261,7 @@ export default function App() {
                     color="blue"
                 />
                  <StatCard 
-                    label="Thread Count" 
+                    label="Workers" 
                     value={config.threadCount} 
                     icon={<Cpu className="w-4 h-4" />} 
                 />
@@ -260,64 +270,134 @@ export default function App() {
             {/* Configuration Panel (Collapsible) */}
             {showConfig && (
                 <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 animate-in slide-in-from-top-4">
-                    <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
-                        <Settings className="w-4 h-4 text-zinc-500" /> Configuration
-                    </h2>
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                            <Settings className="w-4 h-4 text-emerald-500" /> Scanner Configuration
+                        </h2>
+                    </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-xs text-zinc-500 mb-1">Target URL</label>
-                            <input 
-                                type="text" 
-                                className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-sm text-zinc-300 focus:border-emerald-500 focus:outline-none font-mono"
-                                value={config.targetUrl}
-                                onChange={e => setConfig({...config, targetUrl: e.target.value})}
-                                disabled={isRunning}
-                            />
+                    <div className="space-y-6">
+                        {/* Section 1: Connection & Workers */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs text-zinc-500 mb-1">Target URL</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-sm text-zinc-300 focus:border-emerald-500 focus:outline-none font-mono"
+                                    value={config.targetUrl}
+                                    onChange={e => setConfig({...config, targetUrl: e.target.value})}
+                                    disabled={isRunning}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-zinc-500 mb-1">Thread/Worker Count</label>
+                                <input 
+                                    type="number" 
+                                    className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-sm text-zinc-300 focus:border-emerald-500 focus:outline-none font-mono"
+                                    value={config.threadCount}
+                                    onChange={e => setConfig({...config, threadCount: parseInt(e.target.value) || 1})}
+                                    disabled={isRunning}
+                                />
+                            </div>
                         </div>
-                        <div>
-                            <label className="block text-xs text-zinc-500 mb-1">Thread/Worker Count</label>
-                            <input 
-                                type="number" 
-                                className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-sm text-zinc-300 focus:border-emerald-500 focus:outline-none font-mono"
-                                value={config.threadCount}
-                                onChange={e => setConfig({...config, threadCount: parseInt(e.target.value) || 1})}
-                                disabled={isRunning}
-                            />
+
+                        {/* Section 2: Character Set & Range */}
+                        <div className="bg-zinc-950/50 p-4 rounded border border-zinc-800">
+                            <label className="block text-xs font-bold text-zinc-400 mb-3 uppercase tracking-wider">
+                                Generator Settings
+                            </label>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                                {/* Toggles */}
+                                <button 
+                                    onClick={() => !isRunning && setConfig({...config, useNumbers: !config.useNumbers})}
+                                    className={`flex items-center gap-2 p-2 rounded border transition-all ${config.useNumbers ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400' : 'bg-zinc-900 border-zinc-700 text-zinc-500 hover:border-zinc-600'}`}
+                                >
+                                    <Hash className="w-4 h-4" />
+                                    <span className="text-xs font-mono font-bold">NUMBERS (0-9)</span>
+                                </button>
+                                
+                                <button 
+                                    onClick={() => !isRunning && setConfig({...config, useLowercase: !config.useLowercase})}
+                                    className={`flex items-center gap-2 p-2 rounded border transition-all ${config.useLowercase ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400' : 'bg-zinc-900 border-zinc-700 text-zinc-500 hover:border-zinc-600'}`}
+                                >
+                                    <Type className="w-4 h-4 lowercase" />
+                                    <span className="text-xs font-mono font-bold">Lowercase (a-z)</span>
+                                </button>
+
+                                <button 
+                                    onClick={() => !isRunning && setConfig({...config, useUppercase: !config.useUppercase})}
+                                    className={`flex items-center gap-2 p-2 rounded border transition-all ${config.useUppercase ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400' : 'bg-zinc-900 border-zinc-700 text-zinc-500 hover:border-zinc-600'}`}
+                                >
+                                    <Type className="w-4 h-4" />
+                                    <span className="text-xs font-mono font-bold">Uppercase (A-Z)</span>
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs text-zinc-500 mb-1 flex items-center gap-1">
+                                        <AlignLeft className="w-3 h-3" /> Code Length
+                                    </label>
+                                    <input 
+                                        type="number" 
+                                        min="1" max="20"
+                                        className="w-full bg-zinc-900 border border-zinc-700 rounded p-2 text-sm text-zinc-300 focus:border-emerald-500 focus:outline-none font-mono"
+                                        value={config.codeLength}
+                                        onChange={e => setConfig({...config, codeLength: parseInt(e.target.value) || 6})}
+                                        disabled={isRunning}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-zinc-500 mb-1">Prefix (Fixed Start)</label>
+                                    <input 
+                                        type="text" 
+                                        placeholder="e.g. WiFi"
+                                        className="w-full bg-zinc-900 border border-zinc-700 rounded p-2 text-sm text-zinc-300 focus:border-emerald-500 focus:outline-none font-mono"
+                                        value={config.codePrefix}
+                                        onChange={e => setConfig({...config, codePrefix: e.target.value})}
+                                        disabled={isRunning}
+                                    />
+                                </div>
+                            </div>
                         </div>
-                         <div>
-                            <label className="block text-xs text-zinc-500 mb-1">Telegram Bot Token</label>
-                            <input 
-                                type="password" 
-                                className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-sm text-zinc-300 focus:border-emerald-500 focus:outline-none font-mono"
-                                value={config.telegramBotToken}
-                                onChange={e => setConfig({...config, telegramBotToken: e.target.value})}
-                                placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs text-zinc-500 mb-1">Telegram Chat ID</label>
-                            <input 
-                                type="text" 
-                                className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-sm text-zinc-300 focus:border-emerald-500 focus:outline-none font-mono"
-                                value={config.telegramChatId}
-                                onChange={e => setConfig({...config, telegramChatId: e.target.value})}
-                                placeholder="12345678"
-                            />
+
+                        {/* Section 3: Telegram */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs text-zinc-500 mb-1">Telegram Bot Token</label>
+                                <input 
+                                    type="password" 
+                                    className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-sm text-zinc-300 focus:border-emerald-500 focus:outline-none font-mono"
+                                    value={config.telegramBotToken}
+                                    onChange={e => setConfig({...config, telegramBotToken: e.target.value})}
+                                    placeholder="123456:ABC-..."
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-zinc-500 mb-1">Telegram Chat ID</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-sm text-zinc-300 focus:border-emerald-500 focus:outline-none font-mono"
+                                    value={config.telegramChatId}
+                                    onChange={e => setConfig({...config, telegramChatId: e.target.value})}
+                                    placeholder="12345678"
+                                />
+                            </div>
                         </div>
                     </div>
                     
-                    <div className="mt-4 flex items-center gap-2">
+                    <div className="mt-6 flex items-center gap-2 p-3 bg-zinc-950/50 rounded border border-zinc-800">
                          <input 
                             type="checkbox" 
                             id="simMode"
                             checked={config.simulationMode}
                             onChange={(e) => setConfig({...config, simulationMode: e.target.checked})}
                             disabled={isRunning}
-                            className="w-4 h-4 accent-emerald-500 bg-zinc-800 border-zinc-700 rounded"
+                            className="w-4 h-4 accent-emerald-500 bg-zinc-800 border-zinc-700 rounded cursor-pointer"
                          />
-                         <label htmlFor="simMode" className="text-sm text-zinc-400 select-none cursor-pointer">
-                            Enable Simulation Mode (Bypasses CORS for UI Testing)
+                         <label htmlFor="simMode" className="text-sm text-zinc-400 select-none cursor-pointer flex-1">
+                            Enable Simulation Mode <span className="text-xs text-zinc-600 block sm:inline">(Recommended for checking UI without actual network calls)</span>
                          </label>
                     </div>
                 </div>

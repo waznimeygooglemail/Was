@@ -1,8 +1,26 @@
+
 import { Config, SessionSlot } from '../types';
 
-// Helper to generate random 6 digit code
-export const generateAccessCode = (): string => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+// Helper to generate random code based on config
+export const generateAccessCode = (config: Config): string => {
+  let charset = '';
+  if (config.useNumbers) charset += '0123456789';
+  if (config.useLowercase) charset += 'abcdefghijklmnopqrstuvwxyz';
+  if (config.useUppercase) charset += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+  // Fallback if nothing selected
+  if (charset.length === 0) charset = '0123456789';
+
+  let result = config.codePrefix || '';
+  // Ensure we don't exceed length if prefix is long, but try to fill remaining
+  const remainingLength = Math.max(0, config.codeLength - result.length);
+
+  for (let i = 0; i < remainingLength; i++) {
+    const randomIndex = Math.floor(Math.random() * charset.length);
+    result += charset[randomIndex];
+  }
+
+  return result;
 };
 
 // Simulate network delay
